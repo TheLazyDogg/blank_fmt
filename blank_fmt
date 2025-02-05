@@ -1,0 +1,154 @@
+#!/bin/bash
+
+# --------------------------------------
+# | Created By Bruno Santos (LazyDogg) |
+# |  04/02/2025 - 23:50 (GMT -03:00)   |
+# --------------------------------------
+
+
+if [[ $(whoami) != "root" ]]; then
+	zenity --error --text "Você precisa estar como ROOT\n(Você digitou sudo?)" --title "Cancelando"
+	exit 1
+fi
+
+
+
+function cancel(){
+	if [[ $1 == "" ]]; then
+		zenity --error --text "Abortando o Processo..." --title "Cancelando"
+		exit 1
+	fi
+}
+
+
+disk=($(zenity --list \
+	--text "Por favor selecione o disco a ser limpo e formatado:" \
+	--title "Blank Format" \
+	--width 150 \
+	--height 210 \
+	--radiolist \
+	--column "Select:" \
+	--column "Disk: " \
+	$(lsblk --output PATH -n -d | nl )))
+
+cancel $disk
+
+options_part=($(zenity --list --width 10 --height 180 \
+	--text "Sistema de Partição" \
+	--column "Selecione:" \
+	--column "----" \
+	"" "MBR" \
+	"" "GPT" \
+	--radiolist \
+	--ok-label "Selecionar" \
+	--cancel-label "Cancelar"))
+
+cancel $options_part
+
+options_fs=($(zenity --list --width 10 --height 210 \
+	--text "Sistema de Arquivos" \
+	--column "Selecione:" \
+	--column "----" \
+	"" "NTFS" \
+	"" "EXT4" \
+	"" "FAT32" \
+	"" "exFAT" \
+	--radiolist \
+	--ok-label "Selecionar" \
+	--cancel-label "Cancelar"))
+
+cancel $options_fs
+
+sure=($(zenity --list \
+	--text "Aqui se encontra um resumo de susas escolhas:" \
+	--column "Informação:" \
+	--column "Opção:" \
+	--column "output" \
+	"Disco:" $disk "1" "Sistema de Partição:" $options_part "" "Sistema de Arquivos:" $options_fs "" \
+	--ok-label "Confirma" \
+	--cancel-label "Cancela" \
+	--hide-column 3 \
+	--hide-header \
+	--print-column 3 && echo "ok" ))
+cancel $sure
+
+warning=($(zenity --question \
+	--text "Atenção! \n Qualquer dado no disco será apagado e não será recuperável \n TEM CERTEZA?" \
+	--title "Atenção!" \
+	--ok-label "OK" \
+	--cancel-label "CANCELAR" && echo "ok"))
+
+cancel $warning
+
+wipefs -a $disk &>> /dev/null
+if [[ $? == 0 ]]; then
+	if [[ $options_part == "MBR" ]]; then
+		echo -e "label: dos" |	sfdisk -q $disk
+		if [[ $? == 0 ]]; then
+			echo -e "," | sfdisk -q $disk
+		fi
+		if [[ $? == 0 ]]; then
+			if [[ $options_fs == "NTFS" || $options_fs == "exFAT" ]]; then
+				echo -e "type=07" | sfdisk -N 1 -q $disk &>> /dev/null
+				if [[ $? == 0 ]]; then
+					if [[ $options_fs == "NTFS" ]]; then
+						mkfs.ntfs -f $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+						exit 0
+					fi
+					if [[ $options_fs == "exFAT" ]]; then
+						mkfs.exfat $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+						exit 0
+					fi 
+				fi 
+			fi
+			if [[ $options_fs == "FAT32" ]]; then
+				echo -e "type=0b" | sfdisk -N 1 -q $disk
+				if [[ $? == 0 ]]; then
+					mkfs.vfat -F 32 $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+					exit 0
+				fi
+			fi
+			if [[ $options_fs == "EXT4" ]]; then
+				mkfs.ext4 $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+				exit 0
+			fi
+		fi
+	fi
+
+	if [[ $options_part == "GPT" ]]; then
+		echo -e "label: gpt" |	sfdisk -q $disk
+		if [[ $? == 0 ]]; then
+			echo -e "," | sfdisk -q $disk
+		fi
+		if [[ $? == 0 ]]; then
+			if [[ $options_fs != "EXT4" ]]; then
+				echo -e "type=EBD0A0A2-B9E5-4433-87C0-68B6B72699C7" | sfdisk -N 1 -q $disk
+				if [[ $? == 0 ]]; then
+					if [[ $options_fs == "NTFS" ]]; then
+						mkfs.ntfs -f $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+						exit 0
+					fi
+					if [[ $options_fs == "exFAT" ]]; then
+						mkfs.exfat $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+						exit 0
+					fi
+					if [[ $options_fs == "FAT32" ]]; then
+						mkfs.vfat -F 32 $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+						exit 0
+					fi
+				fi
+			
+			else
+				echo -e "type=0FC63DAF-8483-4772-8E79-3D69D8477DE4" | sfdisk -N 1 -q $disk
+				if [[ $? == 0 ]]; then
+					mkfs.ext4 $(lsblk $disk -n -p -o PATH | tail -n 1) &>> /dev/null
+					exit 0
+				fi
+			fi
+		fi
+	fi
+fi
+
+zenity --error --text "Erro: Não foi Possível Formatar o Disco...\nAbortando..." --title "Cancelando"
+exit 1
+
