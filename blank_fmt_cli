@@ -2,12 +2,12 @@
 
 # --------------------------------------
 # | Created By Bruno Santos (LazyDogg) |
-# |  04/02/2025 - 23:50 (GMT -03:00)   |
+# |  07/02/2025 - 02:37 (GMT -03:00)   |
 # --------------------------------------
 
 
 if [[ $(whoami) != "root" ]]; then
-	zenity --error --text "Você precisa estar como ROOT\n(Você digitou sudo?)" --title "Cancelando"
+	dialog --clear --title "Cancelando" --msgbox "Você precisa estar como ROOT\n(Você digitou sudo?)" 130 160
 	exit 1
 fi
 
@@ -15,68 +15,70 @@ fi
 
 function cancel(){
 	if [[ $1 == "" ]]; then
-		zenity --error --text "Abortando o Processo..." --title "Cancelando"
+		dialog --title "Cancelando" --msgbox "Abortando o Processo..." 130 160
 		exit 1
 	fi
 }
 
 
-disk=($(zenity --list \
-	--text "Por favor selecione o disco a ser limpo e formatado:" \
-	--title "Blank Format" \
-	--width 150 \
-	--height 210 \
-	--radiolist \
-	--column "Select:" \
-	--column "Disk: " \
-	$(lsblk --output PATH -n -d | nl )))
+disk=($(dialog \
+	--title "Seleção de Disco" \
+	--yes-label "Selecionar" \
+	--no-label "Cancelar" \
+	--stdout \
+	--menu \
+	"Por favor selecione o disco a ser limpo e formatado:" \
+	150 \
+	210 \
+	200 \
+ 	$(lsblk --output PATH -d -n | sed 's/\(^\/dev\/[^>]*\)/\1\ <--/')))
 
 cancel $disk
 
-options_part=($(zenity --list --width 10 --height 180 \
-	--text "Sistema de Partição" \
-	--column "Selecione:" \
-	--column "----" \
-	"" "MBR" \
-	"" "GPT" \
-	--radiolist \
-	--ok-label "Selecionar" \
-	--cancel-label "Cancelar"))
+options_part=($(dialog \
+	--title "Sistema de Partição" \
+	--yes-label "Selecionar" \
+	--no-label "Cancelar" \
+	--stdout \
+	--menu \
+	"Sistema de Partição" \
+	180 \
+	100 \
+	80 \
+	"MBR" "" \
+	"GPT" "" ))
 
 cancel $options_part
 
-options_fs=($(zenity --list --width 10 --height 210 \
-	--text "Sistema de Arquivos" \
-	--column "Selecione:" \
-	--column "----" \
-	"" "NTFS" \
-	"" "EXT4" \
-	"" "FAT32" \
-	"" "exFAT" \
-	--radiolist \
-	--ok-label "Selecionar" \
-	--cancel-label "Cancelar"))
-
+options_fs=($(dialog \
+	--title "Sistema de Arquivos" \
+	--yes-label "Selecionar" \
+	--stdout \
+	--no-label "Cancelar" \
+	--menu \
+	"Sistema de Arquivos" \
+	210 \
+	100 \
+	80 \
+	"NTFS" "" \
+	"EXT4" "" \
+	"FAT32" "" \
+	"exFAT" "" ))
+	
 cancel $options_fs
 
-sure=($(zenity --list \
-	--text "Aqui se encontra um resumo de suas escolhas:" \
-	--column "Informação:" \
-	--column "Opção:" \
-	--column "output" \
-	"Disco:" $disk "1" "Sistema de Partição:" $options_part "" "Sistema de Arquivos:" $options_fs "" \
-	--ok-label "Confirma" \
-	--cancel-label "Cancela" \
-	--hide-column 3 \
-	--hide-header \
-	--print-column 3 && echo "ok" ))
+sure=($(dialog --stdout --ok-label "Confirma" --cancel-label "Cancela" --msgbox \
+	"Aqui se encontra um resumo de suas escolhas:\nDisco: $disk\nSistema de Partição: $options_part\nSistema de Arquivos: $options_fs" \
+	100 150 && echo "ok" ))
 cancel $sure
 
-warning=($(zenity --question \
-	--text "Atenção! \n Qualquer dado no disco será apagado e não será recuperável \n TEM CERTEZA?" \
+warning=($(dialog --stdout \
 	--title "Atenção!" \
-	--ok-label "OK" \
-	--cancel-label "CANCELAR" && echo "ok"))
+	--yes-label "OK" \
+	--no-label "CANCELAR" \
+	--yesno \
+	"Atenção! \n Qualquer dado no disco será apagado e não será recuperável \n TEM CERTEZA?" \
+	100 150 && echo "ok"))
 
 cancel $warning
 
@@ -149,6 +151,7 @@ if [[ $? == 0 ]]; then
 	fi
 fi
 
-zenity --error --text "Erro: Não foi Possível Formatar o Disco...\nAbortando..." --title "Cancelando"
+
+dialog  --title "Cancelando" --msgbox  "Erro: Não foi Possível Formatar o Disco...\nAbortando..." 80 130
 exit 1
 
